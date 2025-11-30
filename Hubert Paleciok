@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>System Skarg</title>
+    <style>
+        body { font-family: Arial, sans-serif; background:#1b1b1b; color:white; margin:0; padding:20px; }
+        .container { max-width:900px; margin:auto; background:#222; padding:20px; border-radius:10px; }
+        h2{ margin-top:0; }
+        input, textarea, select{ width:100%; padding:10px; margin:5px 0 15px; border-radius:5px; border:none; }
+        button{ padding:10px 15px; background:#007bff; border:none; color:white; cursor:pointer; border-radius:5px; }
+        button:hover{ background:#0056c4; }
+        .skarga{ background:#333; padding:15px; margin:10px 0; border-radius:8px; }
+        .komentarz{ background:#444; padding:10px; border-radius:5px; margin-top:8px; }
+        .badge{ padding:5px 8px; border-radius:4px; font-size:12px; }
+        .open{ background:green; }
+        .closed{ background:red; }
+        #adminPanel, #loginPanel{ display:none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>System Skarg</h2>
+
+    <!-- BUTTON ADMIN -->
+    <button onclick="toggleLogin()">Dostęp do sprawdzania skarg</button>
+
+    <!-- PANEL LOGIN -->
+    <div id="loginPanel">
+        <h3>Panel Logowania Admina</h3>
+        <input id="login" placeholder="Login (Imię i Nazwisko IC)">
+        <input id="haslo" type="password" placeholder="Hasło">
+        <button onclick="loginAdmin()">Zaloguj</button>
+    </div>
+
+    <!-- PANEL ADMINA -->
+    <div id="adminPanel">
+        <h3>Panel Admina (zalogowany: <span id="adminName"></span>)</h3>
+        <button onclick="logoutAdmin()" style="background:#b30000;">Wyloguj</button>
+        <br><br>
+
+        <h3>Zarządzanie adminami (Tylko główny admin)</h3>
+        <div id="adminManage"></div>
+
+        <h3>Dodaj admina</h3>
+        <input id="newAdminLogin" placeholder="Login admina (Imię i Nazwisko IC)">
+        <input id="newAdminPass" placeholder="Hasło">
+        <button onclick="addAdmin()">Dodaj admina</button>
+    </div>
+
+    <hr><h3>Dodaj Skargę</h3>
+    <input id="zglaszajacy" placeholder="Imię i Nazwisko zgłaszającego">
+    <input id="uidZglaszajacego" placeholder="UID zgłaszającego">
+    <input id="oskarzony" placeholder="Imię i Nazwisko oskarżonego">
+    <input id="uidOskarzonego" placeholder="UID oskarzonego">
+
+    <select id="typSkargi">
+        <option value="FTO">Skarga na FTO</option>
+        <option value="Kadet">Skarga na kadeta</option>
+    </select>
+    <textarea id="opis" rows="4" placeholder="Opis sytuacji..."></textarea>
+    <textarea id="dowody" rows="3" placeholder="Dowody (linki, opis)"></textarea>
+    <button onclick="dodajSkarge()">Wyślij skargę</button>
+
+    <hr><h3>Lista Skarg</h3>
+    <div id="lista"></div>
+</div>
+
+<script>
+// ======= NOWY SYSTEM ADMINÓW (DZIAŁA ZAWSZE) ========
+
+const ADMIN_KEY = "skargi_admins_v2";
+
+// nadpisujemy adminów ZAWSZE
+const admins = {
+    "Hubert Paleciok": "Paleciok1324?!"
+};
+
+// zapisujemy adminów za każdym wejściem na stronę
+localStorage.setItem(ADMIN_KEY, JSON.stringify(admins));
+
+let loggedAdmin = null;
+
+// ======= LOGIN ========
+function toggleLogin(){
+    document.getElementById("loginPanel").style.display = "block";
+}
+
+function loginAdmin(){
+    let log = document.getElementById("login").value;
+    let pass = document.getElementById("haslo").value;
+
+    let adm = JSON.parse(localStorage.getItem(ADMIN_KEY));
+
+    if(adm[log] && adm[log] === pass){
+        loggedAdmin = log;
+        document.getElementById("adminPanel").style.display = "block";
+        document.getElementById("loginPanel").style.display = "none";
+        document.getElementById("adminName").innerText = log;
+        wyswietlAdminow();
+    } else alert("Zły login lub hasło!");
+}
+
+function logoutAdmin(){
+    loggedAdmin = null;
+    document.getElementById("adminPanel").style.display = "none";
+}
+
+// ======= ZARZĄDZANIE ADMINAMI ========
+function wyswietlAdminow(){
+    let panel = document.getElementById("adminManage");
+    panel.innerHTML = "";
+
+    if(loggedAdmin !== "Hubert Paleciok"){
+        panel.innerHTML = "Tylko główny admin może zarządzać adminami.";
+        return;
+    }
+
+    for(let a in admins){
+        panel.innerHTML += `<div>${a} <button onclick="usunAdmina('${a}')">Usuń</button></div>`;
+    }
+}
+
+function addAdmin(){
+    if(loggedAdmin !== "Hubert Paleciok")
+        return alert("Tylko główny admin może dodawać adminów!");
+
+    let l = document.getElementById("newAdminLogin").value;
+    let p = document.getElementById("newAdminPass").value;
+
+    if(!l || !p) return alert("Wpisz login i hasło!");
+
+    admins[l] = p;
+    localStorage.setItem(ADMIN_KEY, JSON.stringify(admins));
+    wyswietlAdminow();
+}
+
+function usunAdmina(login){
+    if(login === "Hubert Paleciok") return alert("Nie możesz usunąć głównego admina!");
+    delete admins[login];
+    localStorage.setItem(ADMIN_KEY, JSON.stringify(admins));
+    wyswietlAdminow();
+}
+
+// ======= SKARGI ========
+let skargi = JSON.parse(localStorage.getItem("skargi_list") || "[]");
+
+function dodajSkarge(){
+    let s = {
+        id: Date.now(),
+        zglaszajacy: zglaszajacy.value,
+        uidZ: uidZglaszajacego.value,
+        oskarzony: oskarzony.value,
+        uidO: uidOskarzonego.value,
+        typ: typSkargi.value,
+        opis: opis.value,
+        dowody: dowody.value,
+        status: "OPEN",
+        komentarze: []
+    };
+    skargi.push(s);
+    zapisz(); odswiez();
+}
+
+function zapisz(){ localStorage.setItem("skargi_list", JSON.stringify(skargi)); }
+
+function odswiez(){
+    lista.innerHTML = "";
+    skargi.forEach(s=>{
+        lista.innerHTML += `
+            <div class='skarga'>
+                <strong>ID:</strong> ${s.id} <br>
+                <span class="badge ${s.status === 'OPEN' ? 'open':'closed'}">${s.status}</span><br><br>
+                <b>Zgłaszający:</b> ${s.zglaszajacy} (UID: ${s.uidZ})<br>
+                <b>Oskarżony:</b> ${s.oskarzony} (UID: ${s.uidO})<br>
+                <b>Typ skargi:</b> ${s.typ}<br><br>
+                <b>Opis:</b><br>${s.opis}<br><br>
+                <b>Dowody:</b><br>${s.dowody}<br><br>
+
+                <h4>Komentarze:</h4>
+                ${s.komentarze.map(k=>`<div class='komentarz'>${k}</div>`).join('')}
+
+                ${s.status === 'OPEN' ? `
+                    <textarea id='k_${s.id}' placeholder='Dodaj komentarz...'></textarea>
+                    <button onclick='dodajKomentarz(${s.id})'>Wyślij</button>
+                `: `<i>Skarga zamknięta — brak możliwości pisania.</i>`}
+
+                ${loggedAdmin ? `<br><br>
+                    <button onclick='zamknij(${s.id})'>Zamknij</button>
+                    <button onclick='otworz(${s.id})'>Otwórz</button>
+                    <button onclick='usun(${s.id})' style='background:#b30000;'>Usuń</button>` : ``}
+            </div>`;
+    });
+}
+
+function dodajKomentarz(id){
+    let txt = document.getElementById("k_"+id).value;
+    if(!txt) return;
+    let s = skargi.find(x=>x.id===id);
+    s.komentarze.push(txt);
+    zapisz(); odswiez();
+}
+
+function zamknij(id){ skargi.find(x=>x.id===id).status = "CLOSED"; zapisz(); odswiez(); }
+function otworz(id){ skargi.find(x=>x.id===id).status = "OPEN"; zapisz(); odswiez(); }
+function usun(id){ skargi = skargi.filter(x=>x.id!==id); zapisz(); odswiez(); }
+
+odswiez();
+</script>
+</body>
+</html>
